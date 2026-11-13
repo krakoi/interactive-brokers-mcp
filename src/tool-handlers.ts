@@ -1,7 +1,4 @@
 import { IBClient } from "./ib-client.js";
-import { IBGatewayManager } from "./gateway-manager.js";
-import { HeadlessAuthenticator, HeadlessAuthConfig } from "./headless-auth.js";
-import open from "open";
 import { Logger } from "./logger.js";
 import { FlexQueryClient } from "./flex-query-client.js";
 import { FlexQueryStorage } from "./flex-query-storage.js";
@@ -29,7 +26,6 @@ import {
 
 export interface ToolHandlerContext {
   ibClient: IBClient;
-  gatewayManager?: IBGatewayManager;
   config: any;
   flexQueryClient?: FlexQueryClient;
   flexQueryStorage?: FlexQueryStorage;
@@ -46,26 +42,8 @@ type AuthGuardResult =
   | { ok: true }
   | { ok: false; result: ToolHandlerResult };
 
-type HeadlessAuthOutcome = {
-  success: boolean;
-  status?: string;
-  message?: string;
-  error?: string;
-  browserKeptOpen?: boolean;
-};
-
-const DEFAULT_AUTH_WAIT_SECONDS = 60;
-const DEFAULT_AUTH_POLL_SECONDS = 5;
-
-/**
- * IBKR rate-limits rapid logins and will lock an account that keeps retrying. Without
- * this ceiling a broken login drives a fresh browser session on every tool call.
- */
-const MAX_FAILED_LOGINS = 5;
-
 export class ToolHandlers {
   private context: ToolHandlerContext;
-  private failedLogins = 0;
 
   constructor(context: ToolHandlerContext) {
     this.context = context;
@@ -87,174 +65,28 @@ export class ToolHandlers {
     }
   }
 
-  // Ensure Gateway is ready before operations
-  private async ensureGatewayReady(): Promise<void> {
-    if (this.context.gatewayManager) {
-      await this.context.gatewayManager.ensureGatewayReady();
-    }
+  private jsonResult(payload: unknown): ToolHandlerResult {
+    return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
   }
 
   private buildAuthUrl(): string {
-    const port = this.context.gatewayManager
-      ? this.context.gatewayManager.getCurrentPort()
-      : this.context.config.IB_GATEWAY_PORT;
-    return `https://${this.context.config.IB_GATEWAY_HOST}:${port}`;
+    return `https://${this.context.config.IB_GATEWAY_HOST}:${this.context.config.IB_GATEWAY_PORT}`;
   }
 
-  private buildHeadlessAuthConfig(url: string, timeoutMs: number): HeadlessAuthConfig {
-    const config = this.context.config;
-    return {
-      url,
-      username: config.IB_USERNAME,
-      password: config.IB_PASSWORD_AUTH,
-      timeout: timeoutMs,
-      ibClient: this.context.ibClient,
-      paperTrading: config.IB_PAPER_TRADING,
-      twoFaStrategy: config.IB_TWO_FA_STRATEGY,
-      totpSecret: config.IB_TOTP_SECRET,
-      selectors: {
-        username: config.IB_SELECTOR_USERNAME || undefined,
-        password: config.IB_SELECTOR_PASSWORD || undefined,
-        loginSubmit: config.IB_SELECTOR_LOGIN_SUBMIT || undefined,
-        totpInput: config.IB_SELECTOR_TOTP_INPUT || undefined,
-        totpSubmit: config.IB_SELECTOR_TOTP_SUBMIT || undefined,
-        totpDeviceSelect: config.IB_SELECTOR_TOTP_DEVICE_SELECT || undefined,
-      },
-    };
-  }
-
-  private textResult(text: string): ToolHandlerResult {
-    return {
-      content: [
-        {
-          type: "text",
-          text,
-        },
-      ],
-    };
-  }
-
-  private jsonResult(payload: unknown): ToolHandlerResult {
-    return this.textResult(JSON.stringify(payload, null, 2));
-  }
-
-  private getAuthWaitOptions(): { maxWaitSeconds: number; pollSeconds: number } {
-    const configuredWait = Number(this.context.config.IB_AUTH_WAIT_SECONDS);
-    const configuredPoll = Number(this.context.config.IB_AUTH_POLL_SECONDS);
-
-    const maxWaitSeconds =
-      Number.isFinite(configuredWait) && configuredWait >= 0
-        ? configuredWait
-        : DEFAULT_AUTH_WAIT_SECONDS;
-    const pollSeconds =
-      Number.isFinite(configuredPoll) && configuredPoll > 0
-        ? configuredPoll
-        : DEFAULT_AUTH_POLL_SECONDS;
-
-    return { maxWaitSeconds, pollSeconds };
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  // Authentication management
+  // Authentication management. Login itself always happens manually in the
+  // external gateway's web page; this only checks and revives the session.
   private async ensureAuth(): Promise<AuthGuardResult> {
-    // Ensure Gateway is ready first
-    await this.ensureGatewayReady();
-
-    // Check if already authenticated
-    let isAuthenticated = await this.context.ibClient.checkAuthenticationStatus();
-    if (isAuthenticated) {
+    if (await this.context.ibClient.checkAuthenticationStatus()) {
       return { ok: true };
     }
 
     // The brokerage session expires long before the SSO session does, so a plain
-    // reauthenticate normally revives it - no browser, no 2FA, and no exposure to
-    // IBKR's login rate limits. Try that before paying for a full login. This is the
-    // cheap rung of the ladder and it works in browser mode too, where the only other
-    // option is to make the user go and click through a login page.
+    // reauthenticate normally revives it without a new login.
     if (await this.tryReauthenticate()) {
       return { ok: true };
     }
 
-    // If not authenticated, and not in headless mode, throw an error immediately.
-    if (!this.context.config.IB_HEADLESS_MODE) {
-      const authUrl = this.buildAuthUrl();
-      throw new Error(`Authentication required. Please use the 'authenticate' tool to complete the authentication process at ${authUrl}.`);
-    }
-
-    // --- Headless Mode Logic ---
-    // Validate that we have credentials for headless mode
-    if (!this.context.config.IB_USERNAME || !this.context.config.IB_PASSWORD_AUTH) {
-      return {
-        ok: false,
-        result: this.jsonResult({
-          success: false,
-          status: "AUTHENTICATION_CONFIGURATION_REQUIRED",
-          message: "Headless authentication credentials are missing.",
-          nextInstruction: "Set IB_USERNAME and IB_PASSWORD_AUTH, then try again.",
-        }),
-      };
-    }
-    
-    // Stop hammering IBKR once a login is clearly not going to succeed: retrying on
-    // every tool call is how an account ends up rate-limited or locked out.
-    if (this.failedLogins >= MAX_FAILED_LOGINS) {
-      return {
-        ok: false,
-        result: this.jsonResult({
-          success: false,
-          status: "AUTHENTICATION_CIRCUIT_OPEN",
-          message: `Headless authentication failed ${this.failedLogins} times in a row. Refusing to retry automatically to avoid IBKR rate-limiting or an account lockout.`,
-          nextInstruction:
-            "Check IB_USERNAME, IB_PASSWORD_AUTH and IB_TOTP_SECRET, then call the 'authenticate' tool to reset the circuit and retry.",
-        }),
-      };
-    }
-
-    // Configuration for the polling loop
-    const timeoutSeconds = this.context.config.IB_AUTH_TIMEOUT || 300; // 5 minutes default
-    const pollIntervalSeconds = 5;
-    const deadline = Date.now() + timeoutSeconds * 1000;
-
-    Logger.info(`⚡ Headless authentication required. Starting process with a ${timeoutSeconds}s timeout.`);
-
-    // Trigger headless authentication once, but don't wait for the promise here.
-    // The promise is handled to log results, but the primary flow control is the polling loop.
-    const authUrl = this.buildAuthUrl();
-    const authConfig = this.buildHeadlessAuthConfig(authUrl, timeoutSeconds * 1000);
-
-    const authenticator = new HeadlessAuthenticator();
-    // Fire-and-forget the auth trigger, but handle its completion for logging/cleanup
-    authenticator.authenticate(authConfig)
-      .then(async (result) => {
-        if (!result.browserKeptOpen) {
-          await authenticator.close().catch(() => {});
-        }
-        Logger.info(`🎯 Headless authentication process completed: success=${result.success}`);
-      })
-      .catch(async (err) => {
-        await authenticator.close().catch(() => {});
-        Logger.error("❌ Headless authentication process failed:", err);
-      });
-
-    // Start the blocking polling loop
-    while (Date.now() < deadline) {
-      Logger.debug("Polling for authentication status...");
-      isAuthenticated = await this.context.ibClient.checkAuthenticationStatus();
-      if (isAuthenticated) {
-        Logger.info("✅ Authentication successful.");
-        this.failedLogins = 0;
-        return { ok: true };
-      }
-      await this.sleep(pollIntervalSeconds * 1000);
-    }
-
-    // If the loop completes without success, we've timed out
-    this.failedLogins++;
-    Logger.error(`❌ Authentication timed out after ${timeoutSeconds} seconds (failure ${this.failedLogins}/${MAX_FAILED_LOGINS}).`);
-    throw new Error(`Authentication timed out after ${timeoutSeconds} seconds. Please check for a 2FA notification on your device.`);
+    throw new Error(`Authentication required. Please log in to the IB Client Portal Gateway at ${this.buildAuthUrl()} (or call the 'authenticate' tool).`);
   }
 
   /**
@@ -269,7 +101,6 @@ export class ToolHandlers {
       const recovered = await this.context.ibClient.checkAuthenticationStatus();
       if (recovered) {
         Logger.info("✅ Reauthenticate restored the brokerage session; skipping full login.");
-        this.failedLogins = 0;
       } else {
         Logger.info("Reauthenticate did not restore the session; a full login is required.");
       }
@@ -331,9 +162,7 @@ export class ToolHandlers {
   }
 
   private getAuthenticationErrorMessage(): string {
-    const authUrl = this.buildAuthUrl();
-    const mode = this.context.config.IB_HEADLESS_MODE ? "headless mode" : "browser mode";
-    return `Authentication required. Please use the 'authenticate' tool to complete the authentication process (configured for ${mode}) at ${authUrl}.`;
+    return `Authentication required. Please log in to the IB Client Portal Gateway at ${this.buildAuthUrl()} (or call the 'authenticate' tool). Make sure the gateway is running.`;
   }
 
   /**
@@ -396,156 +225,38 @@ export class ToolHandlers {
     return `Error: ${errorMessage}`;
   }
 
-  async authenticate(input: AuthenticateInput): Promise<ToolHandlerResult> {
+  async authenticate(_input: AuthenticateInput): Promise<ToolHandlerResult> {
+    const authUrl = this.buildAuthUrl();
     try {
-      // An explicit authenticate call is the caller asserting they have fixed whatever
-      // was broken, so it resets the circuit breaker that ensureAuth may have opened.
-      this.failedLogins = 0;
-
-      // Ensure Gateway is ready
-      await this.ensureGatewayReady();
-
-      const port = this.context.gatewayManager 
-        ? this.context.gatewayManager.getCurrentPort() 
-        : this.context.config.IB_GATEWAY_PORT;
-      const authUrl = `https://${this.context.config.IB_GATEWAY_HOST}:${port}`;
-      
-      // Check if headless mode is enabled in config
-      if (this.context.config.IB_HEADLESS_MODE) {
-        try {
-          // Use headless authentication
-          const authConfig = this.buildHeadlessAuthConfig(authUrl, this.context.config.IB_AUTH_TIMEOUT);
-
-          // Validate that we have credentials for headless mode
-          if (!authConfig.username || !authConfig.password) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify({
-                    success: false,
-                    message: "Headless mode enabled but authentication credentials missing",
-                    error: "Please set IB_USERNAME and IB_PASSWORD_AUTH environment variables for headless authentication",
-                    authUrl: authUrl,
-                    instructions: [
-                      "Set environment variables: IB_USERNAME and IB_PASSWORD_AUTH",
-                      "Or disable headless mode by setting IB_HEADLESS_MODE=false",
-                      "Then try authentication again"
-                    ]
-                  }, null, 2),
-                },
-              ],
-            };
-          }
-
-          const authenticator = new HeadlessAuthenticator();
-          const result = await authenticator.authenticate(authConfig);
-
-          // Keep the browser alive only when the authenticator reports a user-action
-          // 2FA state that can still be completed after this tool response.
-          if (!result.browserKeptOpen) {
-            await authenticator.close();
-          }
-          
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  ...result,
-                  authUrl: authUrl,
-                  mode: "headless",
-                  note: "Headless authentication completed automatically"
-                }, null, 2),
-              },
-            ],
-          };
-
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  success: false,
-                  message: "Headless authentication failed, falling back to manual browser authentication",
-                  error: errorMessage,
-                  authUrl: authUrl,
-                  mode: "fallback_to_manual",
-                  note: "Opening browser for manual authentication..."
-                }, null, 2),
-              },
-            ],
-          };
-        }
+      if (await this.context.ibClient.checkAuthenticationStatus()) {
+        return this.jsonResult({ authenticated: true, authUrl });
       }
-      
-      // Original browser-based authentication (when headless mode is disabled or as fallback)
-      try {
-        await open(authUrl);
-        
-        // Start polling for authentication to complete
-        // The browser auth creates a server-side session that the REST API can use
-        // We poll until authenticated, then trigger reauthenticate for the REST session
-        this.startBrowserAuthPolling(authUrl, port);
-        
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                message: "Interactive Brokers authentication interface opened in your browser",
-                authUrl: authUrl,
-                mode: "browser",
-                instructions: [
-                  "1. The authentication page has been opened in your default browser",
-                  "2. Accept any SSL certificate warnings (this is normal for localhost)",
-                  "3. Complete the authentication process in the IB Gateway web interface",
-                  "4. Log in with your Interactive Brokers credentials",
-                  "5. Once authenticated, you can use other trading tools"
-                ],
-                browserOpened: true,
-                polling: true,
-                note: "IB Gateway is running locally - your credentials stay secure on your machine. Polling for authentication completion..."
-              }, null, 2),
-            },
-          ],
-        };
-      } catch (browserError) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                message: "Opening Interactive Brokers authentication interface...",
-                authUrl: authUrl,
-                mode: "manual",
-                instructions: [
-                  "1. Open the authentication URL below in your browser:",
-                  `   ${authUrl}`,
-                  "2. Accept any SSL certificate warnings (this is normal for localhost)",
-                  "3. Complete the authentication process",
-                  "4. Log in with your Interactive Brokers credentials",
-                  "5. Once authenticated, you can use other trading tools"
-                ],
-                browserOpened: false,
-                note: "Please open the URL manually. IB Gateway is running locally."
-              }, null, 2),
-            },
-          ],
-        };
+      if (await this.tryReauthenticate()) {
+        return this.jsonResult({ authenticated: true, authUrl, note: "Session revived via reauthenticate" });
       }
     } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: this.formatError(error),
-          },
-        ],
-      };
+      if (this.isTransportError(error)) {
+        return this.jsonResult({
+          authenticated: false,
+          authUrl,
+          message: `The Client Portal Gateway is not reachable at ${authUrl}. Start your gateway and try again.`,
+        });
+      }
     }
+
+    // Not logged in: the user logs in manually; poll in the background so the
+    // REST session is initialized as soon as the login completes.
+    this.startBrowserAuthPolling(authUrl, this.context.config.IB_GATEWAY_PORT);
+    return this.jsonResult({
+      authenticated: false,
+      authUrl,
+      instructions: [
+        `Open ${authUrl} in your browser (accept the self-signed certificate warning)`,
+        "Log in with your Interactive Brokers credentials and complete 2FA",
+        "Then retry the tool call",
+      ],
+      polling: true,
+    });
   }
 
   async getAccountInfo(input: GetAccountInfoInput): Promise<ToolHandlerResult> {

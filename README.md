@@ -4,6 +4,10 @@
 <img src="https://www.interactivebrokers.com/images/web/logos/ib-logo-text-black.svg" alt="Interactive Brokers" width="300">
 </div>
 
+> **Fork note**: This fork does **not** bundle the IB Client Portal Gateway,
+> a Java runtime, or browser-automation login. It only connects to a Client
+> Portal Gateway you install and run yourself from a trusted source.
+
 > **DISCLAIMER**: This is an **unofficial**, community-developed MCP server
 > and is **NOT** affiliated with or endorsed by Interactive Brokers. This
 > software is in **Alpha state** and may not work perfectly.
@@ -24,8 +28,8 @@ your IB account to retrieve market data, check positions, and place trades.
 
 - **Interactive Brokers API Integration**: Full trading capabilities including account management, position tracking, real-time market data, and order management (market, limit, and stop orders)
 - **Flex Query Support**: Execute Flex Queries to retrieve account statements, trade confirmations, and historical data. Queries are automatically remembered for easy reuse
-- **Flexible Authentication**: Choose between browser-based OAuth authentication or headless mode with credentials for automated environments, including fully automated TOTP 2FA override. See [TOTP 2FA Strategy Document](docs/2FA-TOTP-STRATEGY.md) for detailed configuration and important risk warnings.
-- **Simple Setup**: Run directly with `npx` - no Docker or additional installations required. Includes pre-configured IB Gateway and Java runtime for all platforms
+- **Portfolio tools**: Compact per-account snapshot (cash per currency and positions) and live FX rates across all currencies in the portfolio
+- **External gateway only**: Connects to your own Client Portal Gateway; you log in through its web page, credentials never pass through this server
 
 ## Security Notice
 
@@ -42,97 +46,35 @@ your IB account to retrieve market data, check positions, and place trades.
 
 ## Prerequisites
 
-**No additional installations required for mainstream platforms.** This package includes:
-
-- Pre-configured IB Gateway for all platforms (Linux, macOS, Windows)
-- Java Runtime Environment (JRE) for macOS, Windows, and standard Linux builds
-- Automatic first-run musl JRE download for Alpine-based containers (e.g. `node:lts-alpine`, supergateway)
-- All necessary dependencies
-
-You only need:
-
 - Interactive Brokers account (paper or live trading)
-- Node.js 18+ (for running the MCP server)
+- Node.js 20+
+- The [IB Client Portal Gateway](https://www.interactivebrokers.com/en/trading/ib-api.php#client-portal-api),
+  installed from a trusted source and running (default `https://localhost:5000`)
 
 ## Quick Start
 
-Add this MCP server to your Cursor/Claude configuration:
+1. Start your Client Portal Gateway and log in at `https://localhost:5000`
+   (accept the self-signed certificate warning). Choose paper or live trading at login.
+2. Add this MCP server to your Cursor/Claude configuration:
 
 ```json
 {
   "mcpServers": {
     "interactive-brokers": {
-      "command": "npx",
-      "args": ["-y", "interactive-brokers-mcp"]
-    }
-  }
-}
-```
-
-When you first use the server, a web browser window will automatically open for
-the Interactive Brokers OAuth authentication flow. Log in with your IB
-credentials to authorize the connection.
-
-## Headless Mode Configuration
-
-For automated environments or when you prefer not to use a browser for
-authentication, you can enable headless mode by configuring it in your MCP
-server configuration:
-
-```json
-{
-  "mcpServers": {
-    "interactive-brokers": {
-      "command": "npx",
-      "args": ["-y", "interactive-brokers-mcp"],
+      "command": "node",
+      "args": ["/path/to/interactive-brokers-mcp/dist/index.js"],
       "env": {
-        "IB_HEADLESS_MODE": "true",
-        "IB_USERNAME": "your_ib_username",
-        "IB_PASSWORD_AUTH": "your_ib_password"
-      }
-    }
-  }
-}
-
-```
-
-In headless mode, the server will automatically authenticate using your
-credentials without opening a browser window. This is useful for:
-
-- Automated trading systems
-- Server environments without a display
-- CI/CD pipelines
-- Situations where browser interaction is not desired
-
-**Important**: Even in headless mode, Interactive Brokers may still require
-two-factor authentication (2FA). When 2FA is triggered, the headless
-authentication will wait up to 60 seconds for you to complete the 2FA process
-through your configured method (mobile app, SMS, etc.) before returning an
-`AUTHENTICATION_PENDING` response. Wait for approval to complete, then check
-account info again.
-
-To enable paper trading, add `"IB_PAPER_TRADING": "true"` to your environment variables:
-
-```json
-{
-  "mcpServers": {
-    "interactive-brokers": {
-      "command": "npx",
-      "args": ["-y", "interactive-brokers-mcp"],
-      "env": {
-        "IB_HEADLESS_MODE": "true",
-        "IB_USERNAME": "your_ib_username",
-        "IB_PASSWORD_AUTH": "your_ib_password",
-        "IB_PAPER_TRADING": "true"
+        "IB_GATEWAY_HOST": "localhost",
+        "IB_GATEWAY_PORT": "5000"
       }
     }
   }
 }
 ```
 
-**Security Note**: Store credentials securely and never commit them to version
-control. Consider using environment variable files or secure credential
-management systems.
+If the session is not logged in, tools return the gateway URL to log in at. The
+`authenticate` tool checks the session, revives an expired one via
+reauthenticate, or tells you where to log in and waits for it in the background.
 
 ## Flex Query Configuration (Optional)
 
@@ -142,8 +84,8 @@ To use Flex Queries for retrieving account statements and historical data, you n
 {
   "mcpServers": {
     "interactive-brokers": {
-      "command": "npx",
-      "args": ["-y", "interactive-brokers-mcp"],
+      "command": "node",
+      "args": ["/path/to/interactive-brokers-mcp/dist/index.js"],
       "env": {
         "IB_FLEX_TOKEN": "your_flex_token_here"
       }
@@ -182,36 +124,10 @@ For a complete guide on creating and customizing Flex Queries, see the [IB Flex 
 
 | Feature | Environment Variable | Command Line Argument |
 |---------|---------------------|----------------------|
-| Username | `IB_USERNAME` | `--ib-username` |
-| Password | `IB_PASSWORD_AUTH` | `--ib-password-auth` |
-| Headless Mode | `IB_HEADLESS_MODE` | `--ib-headless-mode` |
-| Paper Trading | `IB_PAPER_TRADING` | `--ib-paper-trading` |
-| Auth Timeout | `IB_AUTH_TIMEOUT` | `--ib-auth-timeout` |
-| Auth Wait Seconds | `IB_AUTH_WAIT_SECONDS` | `--ib-auth-wait-seconds` |
-| Auth Poll Seconds | `IB_AUTH_POLL_SECONDS` | `--ib-auth-poll-seconds` |
-| Force standalone bundled gateway | `IB_FORCE_STANDALONE_GATEWAY` | N/A |
+| Gateway host | `IB_GATEWAY_HOST` (default `localhost`) | N/A |
+| Gateway port | `IB_GATEWAY_PORT` (default `5000`) | N/A |
 | Flex Token | `IB_FLEX_TOKEN` | N/A |
 | Read-only mode | `IB_READ_ONLY_MODE` | `--ib-read-only-mode` |
-| 2FA Strategy | `IB_TWO_FA_STRATEGY` | N/A |
-| TOTP Secret Key | `IB_TOTP_SECRET` | N/A |
-| Login page selector overrides | `IB_SELECTOR_USERNAME`, `IB_SELECTOR_PASSWORD`, `IB_SELECTOR_LOGIN_SUBMIT` | N/A |
-| TOTP form selector overrides | `IB_SELECTOR_TOTP_INPUT`, `IB_SELECTOR_TOTP_SUBMIT` | N/A |
-
-See the [TOTP 2FA Strategy Document](docs/2FA-TOTP-STRATEGY.md) for details on the 2FA and selector-override variables.
-
-## Gateway Lifecycle
-
-On startup, the MCP first probes reachable local Gateway endpoints on the configured port and common Client Portal Gateway ports. If a healthy existing Gateway is found, the MCP attaches to it and does not start another bundled Gateway.
-
-When no suitable existing Gateway is reachable, the MCP starts the bundled Java Gateway as a durable detached process. Runtime coordination files are stored under `ib-gateway/.runtime/`:
-
-- `gateway-session.json` records the MCP-managed Gateway pid, port, version, and log paths.
-- `gateway-session.lock` prevents two MCP processes from starting duplicate managed Gateways at the same time.
-- `gateway.stdout.log` and `gateway.stderr.log` receive the Gateway process output.
-
-Normal MCP shutdown detaches from the Gateway and leaves it running so later MCP runs can reuse it. If `IB_FORCE_STANDALONE_GATEWAY=true` is set, the MCP skips unrelated external Gateway discovery, but it still reuses or coordinates through the durable MCP-managed session metadata and lock files.
-
-To reset the managed Gateway session, stop the Gateway process recorded in `ib-gateway/.runtime/gateway-session.json`, then remove `ib-gateway/.runtime/gateway-session.json` and any stale `ib-gateway/.runtime/gateway-session.lock`. The MCP automatically removes stale metadata when the recorded pid no longer exists.
 
 ## Available MCP Tools
 
@@ -221,7 +137,9 @@ To reset the managed Gateway session, stop the Gateway process recorded in `ib-g
 | ------------------ | ----------------------------------------- |
 | `get_account_info` | Retrieve account information and balances |
 | `get_positions`    | Get current positions and P&L             |
-| `get_market_data`  | Real-time market data for symbols         |
+| `get_market_data`  | Real-time market data for symbols (retries until prices arrive) |
+| `get_portfolio_snapshot` | Per-account cash per currency and all positions |
+| `get_fx_rates`     | Live FX rates for every currency in the portfolio |
 | `place_order`      | Place market, limit, or stop orders (only if read-only mode is disabled) |
 | `get_order_status` | Check order execution status              |
 | `get_live_orders`  | Get all live/open orders for monitoring   |
@@ -236,18 +154,12 @@ To reset the managed Gateway session, stop the Gateway process recorded in `ib-g
 
 ## Troubleshooting
 
-**Authentication Problems:**
+**Gateway not reachable:** make sure your Client Portal Gateway is running and
+listening on `IB_GATEWAY_HOST:IB_GATEWAY_PORT`.
 
-- Use the web interface that opens automatically
-- Complete any required two-factor authentication
-- Try paper trading mode if live trading fails
-
-**Gateway Discovery Problems:**
-
-- If another IB Gateway is already listening on a local port but should not be reused, set `IB_FORCE_STANDALONE_GATEWAY=true`
-- Existing gateways are only reused when the MCP process can reach them over HTTPS; otherwise the bundled standalone gateway is started on an available port
-- For MCP-managed Gateway startup issues, inspect `ib-gateway/.runtime/gateway.stdout.log`, `ib-gateway/.runtime/gateway.stderr.log`, and `ib-gateway/.runtime/gateway-session.json`
-- To clear a stale managed startup lock, confirm no MCP process is currently starting Gateway, then remove `ib-gateway/.runtime/gateway-session.lock`
+**Authentication problems:** open the gateway URL in a browser, log in and
+complete 2FA, then retry. The brokerage session times out after inactivity; the
+server keeps it alive and revives it with reauthenticate where possible.
 
 ## Support
 

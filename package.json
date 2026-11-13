@@ -13,13 +13,6 @@
   },
   "files": [
     "dist/**/*",
-    "ib-gateway/**/*",
-    "runtime/darwin-arm64/**/*",
-    "runtime/darwin-x64/**/*",
-    "runtime/linux-arm64/**/*",
-    "runtime/linux-x64/**/*",
-    "runtime/win32-x64/**/*",
-    "install/**/*",
     "README.md",
     "LICENSE"
   ],
@@ -62,9 +55,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.0",
     "express": "^4.22.2",
-    "open": "^10.2.0",
-    "otpauth": "^9.5.1",
-    "playwright-core": "^1.54.2",
     "undici": "^7.0.0",
     "xml2js": "^0.6.2",
     "zod": "^3.25.76"

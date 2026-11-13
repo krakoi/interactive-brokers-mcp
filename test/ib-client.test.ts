@@ -124,7 +124,7 @@ describe('IBClient', () => {
       (client as any).spawnDurableTickler();
 
       expect(mockFs.mkdirSync).toHaveBeenCalledWith(
-        expect.stringContaining('ib-gateway/.runtime'),
+        expect.stringContaining('/.runtime'),
         { recursive: true }
       );
       expect(mockSpawn).toHaveBeenCalledWith(

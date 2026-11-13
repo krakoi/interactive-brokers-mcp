@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { IBClient } from "./ib-client.js";
-import { IBGatewayManager } from "./gateway-manager.js";
 import { ToolHandlers, type ToolHandlerContext } from "./tool-handlers.js";
 import {
   ActivateAlertZodShape,
@@ -27,12 +26,10 @@ import {
 export function registerTools(
   server: McpServer,
   ibClient: IBClient,
-  gatewayManager?: IBGatewayManager,
   userConfig?: any,
 ) {
   const context: ToolHandlerContext = {
     ibClient,
-    gatewayManager,
     config: userConfig,
   };
 
@@ -49,7 +46,7 @@ export function registerTools(
 
   registerTool(
     "authenticate",
-    "Authenticate with Interactive Brokers. Usage: `{ \"confirm\": true }`.",
+    "Check the session on the external Client Portal Gateway; if not logged in, returns the gateway URL to log in at and waits for the login in the background. Usage: `{ \"confirm\": true }`.",
     AuthenticateZodShape,
     async (args) => await handlers.authenticate(args),
   );

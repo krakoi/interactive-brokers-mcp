@@ -295,7 +295,7 @@ function invert(quote: PairQuote): PairQuote {
   };
 }
 
-export async function collectPortfolioCurrencies(
+async function collectPortfolioCurrencies(
   client: IBClientRequester,
   accountIds?: string[],
 ): Promise<string[]> {

@@ -43,8 +43,7 @@ Tests for tool handlers:
 - Tool execution flow
 - Input validation
 - Error handling and formatting
-- Headless mode authentication
-- Gateway readiness checks
+- Session check / reauthenticate / manual login instructions
 
 ## Test Coverage
 
@@ -55,12 +54,10 @@ Run `npm run test:coverage` to generate a coverage report. The report will be av
 ## Mocking Strategy
 
 The tests use Vitest's mocking capabilities to:
-- Mock axios for HTTP requests
-- Mock IBGatewayManager for gateway operations
-- Mock headless authentication
-- Mock browser operations (playwright)
+- Mock fetch for HTTP requests
+- Mock the IB client in tool handler tests
 
-This allows tests to run quickly without actual network calls or browser automation.
+This allows tests to run quickly without actual network calls.
 
 ## Adding New Tests
 
