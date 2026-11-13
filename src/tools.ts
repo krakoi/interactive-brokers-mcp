@@ -183,7 +183,9 @@ export function registerTools(
       "get_flex_query",
       "Execute a Flex Query and retrieve statements/data. The query will be automatically remembered for future use. " +
         "Usage: `{ \"queryId\": \"123456\" }` or with a friendly name: `{ \"queryId\": \"123456\", \"queryName\": \"Monthly Trades\" }`. " +
-        "Set `parseXml: false` to get raw XML instead of parsed JSON.",
+        "Set `parseXml: false` to get raw XML instead of parsed JSON. " +
+        "Optional custom date range (YYYYMMDD, both required together, overrides the query's own period): " +
+        "`{ \"queryId\": \"1308264\", \"fromDate\": \"20251101\", \"toDate\": \"20251130\" }`.",
       GetFlexQueryZodShape,
       async (args) => await handlers.getFlexQuery(args),
     );

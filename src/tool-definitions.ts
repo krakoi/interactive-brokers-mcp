@@ -126,7 +126,13 @@ export const DeleteAlertZodShape = {
 export const GetFlexQueryZodShape = {
   queryId: z.string(),
   queryName: z.string().optional(),
-  parseXml: z.boolean().optional().default(true)
+  parseXml: z.boolean().optional().default(true),
+  saveTo: z.string().optional()
+    .describe("Absolute path to write the raw Flex statement XML to (e.g. for importing into Portfolio Performance). Fails if the file already exists. Returns a summary instead of the data."),
+  fromDate: z.string().regex(/^\d{8}$/, "fromDate must be YYYYMMDD").optional()
+    .describe("Start of a custom date range, YYYYMMDD. Must be given together with toDate. Overrides the query's configured period."),
+  toDate: z.string().regex(/^\d{8}$/, "toDate must be YYYYMMDD").optional()
+    .describe("End of a custom date range, YYYYMMDD (inclusive). Must be given together with fromDate."),
 };
 
 export const ListFlexQueriesZodShape = {

@@ -1,3 +1,5 @@
+import { promises as fs } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
 import { IBClient } from "./ib-client.js";
 import { Logger } from "./logger.js";
 import { FlexQueryClient } from "./flex-query-client.js";
@@ -36,6 +38,21 @@ type ToolHandlerResult = {
     type: "text";
     text: string;
   }>;
+};
+
+/** Account ids and periods from a parsed Flex statement (xml2js, mergeAttrs). */
+const FlexStatementSummary = {
+  from(parsed: any): { accountIds: string[]; periods: { accountId: string; fromDate: string; toDate: string; period?: string }[] } {
+    const raw = parsed?.FlexQueryResponse?.FlexStatements?.FlexStatement;
+    const list: any[] = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
+    const periods = list.map((s) => ({
+      accountId: String(s.accountId ?? ""),
+      fromDate: String(s.fromDate ?? ""),
+      toDate: String(s.toDate ?? ""),
+      ...(s.period ? { period: String(s.period) } : {}),
+    }));
+    return { accountIds: periods.map((p) => p.accountId), periods };
+  },
 };
 
 type AuthGuardResult =
@@ -696,13 +713,38 @@ export class ToolHandlers {
         throw new Error("Flex Query storage not initialized");
       }
 
-      Logger.log(`[FLEX-QUERY] Executing flex query: ${input.queryId}`);
+      if ((input.fromDate === undefined) !== (input.toDate === undefined)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "fromDate and toDate must be given together",
+                queryId: input.queryId,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+      const dateRange = input.fromDate !== undefined && input.toDate !== undefined
+        ? { fromDate: input.fromDate, toDate: input.toDate }
+        : undefined;
+
+      Logger.log(
+        `[FLEX-QUERY] Executing flex query: ${input.queryId}` +
+          (dateRange ? ` (${dateRange.fromDate}..${dateRange.toDate})` : ""),
+      );
 
       // Check if this query was used before (by IB's query ID)
       const existingQuery = await this.context.flexQueryStorage.getQueryByQueryId(input.queryId);
-      
+
       // Execute the query
-      const result = await this.context.flexQueryClient.executeQuery(input.queryId);
+      const result = await this.context.flexQueryClient.executeQuery(
+        input.queryId,
+        undefined,
+        undefined,
+        dateRange,
+      );
 
       if (result.error) {
         return {
@@ -752,6 +794,37 @@ export class ToolHandlers {
           description: `Auto-saved on ${new Date().toLocaleDateString()}`,
         });
         Logger.log(`[FLEX-QUERY] Auto-saved new query: ${queryName}`);
+      }
+
+      // Save the raw statement XML to a file (e.g. for importing into Portfolio Performance).
+      // Returns only a summary, so the large statement is not sent back to the client.
+      if (input.saveTo) {
+        if (!isAbsolute(input.saveTo)) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ error: "saveTo must be an absolute path", saveTo: input.saveTo }, null, 2) }],
+          };
+        }
+        const statements = FlexStatementSummary.from(parsedData);
+        await fs.mkdir(dirname(input.saveTo), { recursive: true });
+        // flag "wx": fail instead of overwriting an existing file
+        await fs.writeFile(input.saveTo, result.data ?? "", { encoding: "utf8", flag: "wx" });
+        Logger.log(`[FLEX-QUERY] Saved raw statement to ${input.saveTo}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                queryId: input.queryId,
+                queryName: queryNameFromApi,
+                savedTo: input.saveTo,
+                accountIds: statements.accountIds,
+                statementPeriods: statements.periods,
+                requestedDateRange: dateRange ?? null,
+              }, null, 2),
+            },
+          ],
+        };
       }
 
       // Return parsed data if requested (and we haven't parsed it yet)
