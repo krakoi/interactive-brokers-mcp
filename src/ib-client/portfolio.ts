@@ -11,14 +11,14 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CurrencyBalance {
+interface CurrencyBalance {
   currency: string;
   cashBalance: number | null;
   settledCash: number | null;
   stockMarketValue: number | null;
 }
 
-export interface SnapshotPosition {
+interface SnapshotPosition {
   symbol: string;
   description: string | null;
   assetClass: string | null;
