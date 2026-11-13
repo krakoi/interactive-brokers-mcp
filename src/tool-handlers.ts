@@ -9,6 +9,8 @@ import {
   AuthenticateInput,
   GetAccountInfoInput,
   GetPositionsInput,
+  GetPortfolioSnapshotInput,
+  GetFxRatesInput,
   GetOptionChainInput,
   ResolveOptionConidInput,
   GetMarketDataInput,
@@ -607,6 +609,32 @@ export class ToolHandlers {
           },
         ],
       };
+    }
+  }
+
+  async getPortfolioSnapshot(input: GetPortfolioSnapshotInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) {
+      return auth.result;
+    }
+    try {
+      const result = await this.context.ibClient.getPortfolioSnapshot(input.accountIds);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: this.formatError(error) }] };
+    }
+  }
+
+  async getFxRates(input: GetFxRatesInput): Promise<ToolHandlerResult> {
+    const auth = await this.ensureAuth();
+    if (!auth.ok) {
+      return auth.result;
+    }
+    try {
+      const result = await this.context.ibClient.getFxRates(input.accountIds, input.quoteCurrencies);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: this.formatError(error) }] };
     }
   }
 

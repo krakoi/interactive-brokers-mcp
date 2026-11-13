@@ -17,6 +17,7 @@ export interface ContractSection {
   secType?: string;
   months?: string;
   exchange?: string;
+  conid?: string | number;
 }
 
 export interface ContractSearch {
@@ -67,6 +68,9 @@ export interface OrderPayload {
 export interface AccountEntry {
   id?: string;
   accountId?: string;
+  accountAlias?: string | null;
+  type?: string;
+  currency?: string;
 }
 
 export interface IBClientConfig {

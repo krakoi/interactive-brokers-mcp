@@ -13,6 +13,7 @@ import {
 
 import { getAccountInfo, getPositions } from "./ib-client/accounts.js";
 import { getMarketData } from "./ib-client/market-data.js";
+import { getPortfolioSnapshot, getFxRates, type PortfolioSnapshot, type FxRatesResult } from "./ib-client/portfolio.js";
 import { getOptionChain, resolveOptionConid } from "./ib-client/options.js";
 import { placeOrder, confirmOrder, getOrderStatus, getOrders } from "./ib-client/orders.js";
 import { getAlerts, createAlert, activateAlert, deleteAlert } from "./ib-client/alerts.js";
@@ -502,6 +503,14 @@ export class IBClient {
 
   async getPositions(accountId?: string): Promise<unknown> {
     return getPositions(this, accountId);
+  }
+
+  async getPortfolioSnapshot(accountIds?: string[]): Promise<PortfolioSnapshot> {
+    return getPortfolioSnapshot(this, accountIds);
+  }
+
+  async getFxRates(accountIds?: string[], quoteCurrencies?: string[]): Promise<FxRatesResult> {
+    return getFxRates(this, { accountIds, quoteCurrencies });
   }
 
   async getOptionChain(
