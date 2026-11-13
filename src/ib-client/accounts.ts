@@ -23,11 +23,11 @@ interface SubaccountsPage {
   subaccounts?: AccountEntry[];
 }
 
-function getAccountId(account: AccountEntry): string | undefined {
+export function getAccountId(account: AccountEntry): string | undefined {
   return account.id?.trim() || account.accountId?.trim() || undefined;
 }
 
-async function getPortfolioAccounts(
+export async function getPortfolioAccounts(
   client: IBClientRequester,
 ): Promise<AccountEntry[]> {
   const accountsResponse = await client.request<AccountEntry[]>("GET", "/portfolio/accounts");

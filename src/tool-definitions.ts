@@ -20,6 +20,15 @@ export const GetPositionsZodShape = {
   accountId: z.string()
 };
 
+export const GetPortfolioSnapshotZodShape = {
+  accountIds: z.array(z.string()).optional()
+};
+
+export const GetFxRatesZodShape = {
+  accountIds: z.array(z.string()).optional(),
+  quoteCurrencies: z.array(z.string().regex(/^[A-Za-z]{3}$/)).optional()
+};
+
 export const GetOptionChainZodShape = {
   symbol: z.string(),
   exchange: z.string().optional()
@@ -131,6 +140,8 @@ export const ForgetFlexQueryZodShape = {
 const AuthenticateZodSchema = z.object(AuthenticateZodShape);
 const GetAccountInfoZodSchema = z.object(GetAccountInfoZodShape);
 export const GetPositionsZodSchema = z.object(GetPositionsZodShape);
+export const GetPortfolioSnapshotZodSchema = z.object(GetPortfolioSnapshotZodShape);
+export const GetFxRatesZodSchema = z.object(GetFxRatesZodShape);
 export const GetOptionChainZodSchema = z.object(GetOptionChainZodShape);
 export const ResolveOptionConidZodSchema = z.object(ResolveOptionConidZodShape);
 export const GetMarketDataZodSchema = z.object(GetMarketDataZodShape);
@@ -208,6 +219,8 @@ export const ForgetFlexQueryZodSchema = z.object(ForgetFlexQueryZodShape);
 export type AuthenticateInput = z.infer<typeof AuthenticateZodSchema>;
 export type GetAccountInfoInput = z.infer<typeof GetAccountInfoZodSchema>;
 export type GetPositionsInput = z.infer<typeof GetPositionsZodSchema>;
+export type GetPortfolioSnapshotInput = z.infer<typeof GetPortfolioSnapshotZodSchema>;
+export type GetFxRatesInput = z.infer<typeof GetFxRatesZodSchema>;
 export type GetOptionChainInput = z.infer<typeof GetOptionChainZodSchema>;
 export type ResolveOptionConidInput = z.infer<typeof ResolveOptionConidZodSchema>;
 export type GetMarketDataInput = z.infer<typeof GetMarketDataZodSchema>;

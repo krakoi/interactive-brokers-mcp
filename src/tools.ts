@@ -17,6 +17,8 @@ import {
   GetOptionChainZodShape,
   GetOrderStatusZodShape,
   GetPositionsZodShape,
+  GetPortfolioSnapshotZodShape,
+  GetFxRatesZodShape,
   ListFlexQueriesZodShape,
   PlaceOrderZodShape,
   ResolveOptionConidZodShape,
@@ -64,6 +66,25 @@ export function registerTools(
     "Get current positions. Usage: `{}` or `{ \"accountId\": \"<id>\" }`.",
     GetPositionsZodShape,
     async (args) => await handlers.getPositions(args),
+  );
+
+  registerTool(
+    "get_portfolio_snapshot",
+    "Get a compact snapshot of accounts: alias, type, base currency, net liquidation, total cash, accrued dividends, " +
+      "cash per currency (from the ledger) and all positions in their original currency. " +
+      "Usage: `{}` for all accounts or `{ \"accountIds\": [\"U123\", \"U456\"] }`.",
+    GetPortfolioSnapshotZodShape,
+    async (args) => await handlers.getPortfolioSnapshot(args),
+  );
+
+  registerTool(
+    "get_fx_rates",
+    "Get live FX rates (bid/ask/mid) from every currency found in the portfolio (positions, cash, base currencies) " +
+      "to each quote currency. Rates read as `1 from = x to`. Pairs IB lists in the other direction are inverted; " +
+      "pairs without a market are derived via USD. `stale: true` means no live bid/ask was available. " +
+      "Usage: `{}` (quote USD) or `{ \"quoteCurrencies\": [\"USD\", \"EUR\", \"HUF\"], \"accountIds\": [\"U123\"] }`.",
+    GetFxRatesZodShape,
+    async (args) => await handlers.getFxRates(args),
   );
 
   registerTool(
