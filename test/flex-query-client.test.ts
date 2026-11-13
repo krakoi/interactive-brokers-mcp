@@ -102,6 +102,42 @@ describe('FlexQueryClient', () => {
         'Unexpected response format from Flex Query service'
       );
     });
+
+    it('should send fd and td when a date range is given', async () => {
+      mockFetch.mockResolvedValueOnce(xmlResponse(`<?xml version="1.0"?>
+<FlexStatementResponse><Status>Success</Status><ReferenceCode>${mockReferenceCode}</ReferenceCode><Url>https://x</Url></FlexStatementResponse>`));
+
+      await client.sendRequest(mockQueryId, { fromDate: '20251101', toDate: '20251130' });
+
+      const url = new URL(mockFetch.mock.calls[0][0]);
+      expect(url.searchParams.get('fd')).toBe('20251101');
+      expect(url.searchParams.get('td')).toBe('20251130');
+      expect(url.searchParams.has('p')).toBe(false);
+    });
+
+    it('should not send fd or td without a date range', async () => {
+      mockFetch.mockResolvedValueOnce(xmlResponse(`<?xml version="1.0"?>
+<FlexStatementResponse><Status>Success</Status><ReferenceCode>${mockReferenceCode}</ReferenceCode><Url>https://x</Url></FlexStatementResponse>`));
+
+      await client.sendRequest(mockQueryId);
+
+      const url = new URL(mockFetch.mock.calls[0][0]);
+      expect(url.searchParams.has('fd')).toBe(false);
+      expect(url.searchParams.has('td')).toBe(false);
+    });
+
+    it('should reject a malformed date range before sending', async () => {
+      await expect(
+        client.sendRequest(mockQueryId, { fromDate: '2025-11-01', toDate: '20251130' })
+      ).rejects.toThrow('fromDate must be YYYYMMDD');
+      await expect(
+        client.sendRequest(mockQueryId, { fromDate: '20251131', toDate: '20251130' })
+      ).rejects.toThrow('not a valid calendar date');
+      await expect(
+        client.sendRequest(mockQueryId, { fromDate: '20251201', toDate: '20251130' })
+      ).rejects.toThrow('must not be after toDate');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('getStatement', () => {
