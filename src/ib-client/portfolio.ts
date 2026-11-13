@@ -282,6 +282,11 @@ function mid(bid: number | null, ask: number | null): number | null {
   return bid !== null && ask !== null ? (bid + ask) / 2 : null;
 }
 
+/** Trim float noise (e.g. 365.26300000000003) to 8 significant digits. */
+function round(value: number | null): number | null {
+  return value === null ? null : Number(value.toPrecision(8));
+}
+
 function invert(quote: PairQuote): PairQuote {
   return {
     bid: quote.ask ? 1 / quote.ask : null,
@@ -382,9 +387,9 @@ export async function getFxRates(
       return {
         from,
         to,
-        bid: combined.bid,
-        ask: combined.ask,
-        mid: mid(combined.bid, combined.ask),
+        bid: round(combined.bid),
+        ask: round(combined.ask),
+        mid: round(mid(combined.bid, combined.ask)),
         source: legs.map((leg) => leg.pair).join("*"),
         inverted: legs.length === 1 && legs[0].inverted,
         derived: legs.length > 1,
