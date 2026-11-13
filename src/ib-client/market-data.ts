@@ -45,7 +45,7 @@ export async function searchContracts(client: IBClientRequester, symbol: string)
   return response.data;
 }
 
-export interface SnapshotRetryOptions {
+interface SnapshotRetryOptions {
   attempts?: number;
   delayMs?: number;
 }

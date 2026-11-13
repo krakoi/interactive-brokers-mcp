@@ -2,16 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerTools } from '../src/tools.js';
 import { IBClient } from '../src/ib-client.js';
-import { IBGatewayManager } from '../src/gateway-manager.js';
 
 // Mock dependencies
 vi.mock('../src/ib-client.js');
-vi.mock('../src/gateway-manager.js');
 
 describe('Read-Only Mode Tool Registration', () => {
     let mockMcpServer: McpServer;
     let mockIBClient: IBClient;
-    let mockGatewayManager: IBGatewayManager;
     let registeredTools: string[] = [];
 
     beforeEach(() => {
@@ -24,12 +21,11 @@ describe('Read-Only Mode Tool Registration', () => {
         } as unknown as McpServer;
 
         mockIBClient = {} as IBClient;
-        mockGatewayManager = {} as IBGatewayManager;
     });
 
     it('should register ALL tools when read-only mode is DISABLED (default)', () => {
         const config = {}; // No IB_READ_ONLY_MODE
-        registerTools(mockMcpServer, mockIBClient, mockGatewayManager, config);
+        registerTools(mockMcpServer, mockIBClient, config);
 
         // Verify write tools are registered
         expect(registeredTools).toContain('place_order');
@@ -45,7 +41,7 @@ describe('Read-Only Mode Tool Registration', () => {
 
     it('should register ALL tools when read-only mode is EXPLICITLY FALSE', () => {
         const config = { IB_READ_ONLY_MODE: false };
-        registerTools(mockMcpServer, mockIBClient, mockGatewayManager, config);
+        registerTools(mockMcpServer, mockIBClient, config);
 
         expect(registeredTools).toContain('place_order');
         expect(registeredTools).toContain('confirm_order');
@@ -56,7 +52,7 @@ describe('Read-Only Mode Tool Registration', () => {
 
     it('should NOT register modification tools when read-only mode is ENABLED', () => {
         const config = { IB_READ_ONLY_MODE: true };
-        registerTools(mockMcpServer, mockIBClient, mockGatewayManager, config);
+        registerTools(mockMcpServer, mockIBClient, config);
 
         // Verify write tools are NOT registered
         expect(registeredTools).not.toContain('place_order');

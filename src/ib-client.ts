@@ -48,7 +48,7 @@ export class IBClient {
   private tickleFailures = 0;
   private maxTickleFailures = 10;
   private sessionCookieHeader?: string;
-  private runtimeDir = path.join(__dirname, "../ib-gateway/.runtime");
+  private runtimeDir = path.join(__dirname, "../.runtime");
   private ticklerJsonPath = path.join(this.runtimeDir, "tickler-session.json");
   private ticklerScriptPath = path.join(__dirname, "scripts/tickler.js");
 
