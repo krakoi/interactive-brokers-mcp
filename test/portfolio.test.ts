@@ -162,3 +162,28 @@ describe('getFxRates', () => {
     expect(result.rates.every((r) => r.stale && r.mid === null)).toBe(true);
   });
 });
+
+describe('getMarketData retry', () => {
+  it('polls the snapshot until price fields appear', async () => {
+    const { getMarketData } = await import('../src/ib-client/market-data.js');
+    const { client, calls } = fakeClient({
+      '/iserver/secdef/search': [{ conid: '4815747', symbol: 'NVDA' }],
+      '/iserver/marketdata/snapshot': (_url: string, n: number) =>
+        n < 2 ? [{ conid: 4815747 }] : [{ conid: 4815747, '31': '169.00', '84': '168.99', '86': '169.01' }],
+    });
+    const result = await getMarketData(client, 'NVDA', undefined, { delayMs: 0 });
+    expect(result.marketData).toEqual([{ conid: 4815747, '31': '169.00', '84': '168.99', '86': '169.01' }]);
+    expect(calls.filter((url) => url.startsWith('/iserver/marketdata/snapshot'))).toHaveLength(3);
+  });
+
+  it('returns the last (empty) snapshot after exhausting attempts', async () => {
+    const { getMarketData } = await import('../src/ib-client/market-data.js');
+    const { client, calls } = fakeClient({
+      '/iserver/secdef/search': [{ conid: '1', symbol: 'X' }],
+      '/iserver/marketdata/snapshot': [{ conid: 1 }],
+    });
+    const result = await getMarketData(client, 'X', undefined, { attempts: 3, delayMs: 0 });
+    expect(result.marketData).toEqual([{ conid: 1 }]);
+    expect(calls.filter((url) => url.startsWith('/iserver/marketdata/snapshot'))).toHaveLength(3);
+  });
+});

@@ -340,7 +340,7 @@ describe('IBClient', () => {
       it('should fetch market data for symbol', async () => {
         mockFetch
           .mockResolvedValueOnce(mockResponse([{ conid: 265598, symbol: 'AAPL' }]))
-          .mockResolvedValueOnce(mockResponse([{ conid: 265598, price: 150.25 }]));
+          .mockResolvedValueOnce(mockResponse([{ conid: 265598, '31': '150.25' }]));
 
         const result = await client.getMarketData('AAPL');
 
@@ -368,7 +368,7 @@ describe('IBClient', () => {
       it('should include exchange in secdef/search URL when provided', async () => {
         mockFetch
           .mockResolvedValueOnce(mockResponse([{ conid: 265598, symbol: 'AAPL' }]))
-          .mockResolvedValueOnce(mockResponse([{ conid: 265598, price: 150.25 }]));
+          .mockResolvedValueOnce(mockResponse([{ conid: 265598, '31': '150.25' }]));
 
         await client.getMarketData('AAPL', 'NASDAQ');
 
@@ -381,7 +381,7 @@ describe('IBClient', () => {
       it('should URL-encode the exchange parameter', async () => {
         mockFetch
           .mockResolvedValueOnce(mockResponse([{ conid: 265598, symbol: 'AAPL' }]))
-          .mockResolvedValueOnce(mockResponse([{ conid: 265598, price: 150.25 }]));
+          .mockResolvedValueOnce(mockResponse([{ conid: 265598, '31': '150.25' }]));
 
         await client.getMarketData('AAPL', 'NYSE ARCA');
 
