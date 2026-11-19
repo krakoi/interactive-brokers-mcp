@@ -634,7 +634,7 @@ describe('IBClient', () => {
         const result = await client.getOrderStatus('123');
 
         expect(mockFetch).toHaveBeenCalledWith(
-          expect.stringContaining('/iserver/account/orders/123'),
+          expect.stringContaining('/iserver/account/order/status/123'),
           expect.objectContaining({ method: 'GET' })
         );
         expect(result).toEqual(mockOrderStatus);
