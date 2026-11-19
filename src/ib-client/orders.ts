@@ -166,7 +166,7 @@ export async function confirmOrder(client: IBClientRequester, replyId: string, m
 
 export async function getOrderStatus(client: IBClientRequester, orderId: string): Promise<unknown> {
   try {
-    const response = await client.request("GET", `/iserver/account/orders/${orderId}`);
+    const response = await client.request("GET", `/iserver/account/order/status/${orderId}`);
     return response.data;
   } catch (error: unknown) {
     Logger.error("Failed to get order status:", error);
